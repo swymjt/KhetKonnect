@@ -1,0 +1,383 @@
+import math
+import json
+from ortools.constraint_solver import routing_enums_pb2
+from ortools.constraint_solver import pywrapcp
+
+
+def haversine_km(coord1, coord2):
+    lat1, lon1 = coord1
+    lat2, lon2 = coord2
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1)
+        * math.cos(phi2)
+        * math.sin(dlambda / 2) ** 2
+    )
+
+    return R * 2 * math.atan2(
+        math.sqrt(a),
+        math.sqrt(1 - a)
+    )
+
+
+def build_sample_locations():
+    locations = [
+        {
+            "name": "Central Warehouse (Hub)",
+            "lat": 20.2961,
+            "lon": 85.8245,
+            "demand": 0
+        },
+        {
+            "name": "Farmer A - Khordha",
+            "lat": 20.1830,
+            "lon": 85.6200,
+            "demand": 8
+        },
+        {
+            "name": "Farmer B - Cuttack Rd",
+            "lat": 20.4625,
+            "lon": 85.8830,
+            "demand": 6
+        },
+        {
+            "name": "Farmer C - Jatani",
+            "lat": 20.1600,
+            "lon": 85.7020,
+            "demand": 5
+        },
+        {
+            "name": "Farmer D - Balianta",
+            "lat": 20.3700,
+            "lon": 85.9100,
+            "demand": 7
+        },
+        {
+            "name": "Farmer E - Tangi",
+            "lat": 20.0500,
+            "lon": 85.6100,
+            "demand": 4
+        },
+        {
+            "name": "Farmer F - Bhubaneswar N",
+            "lat": 20.3550,
+            "lon": 85.8100,
+            "demand": 6
+        },
+        {
+            "name": "Farmer G - Pipili",
+            "lat": 20.1200,
+            "lon": 85.8300,
+            "demand": 9
+        },
+        {
+            "name": "Farmer H - Naharkanta",
+            "lat": 20.2200,
+            "lon": 85.9400,
+            "demand": 5
+        },
+    ]
+
+    return locations
+
+
+def build_distance_matrix(locations):
+    n = len(locations)
+    matrix = [[0] * n for _ in range(n)]
+
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                d = haversine_km(
+                    (
+                        locations[i]["lat"],
+                        locations[i]["lon"]
+                    ),
+                    (
+                        locations[j]["lat"],
+                        locations[j]["lon"]
+                    ),
+                )
+
+                matrix[i][j] = int(d * 1000)
+
+    return matrix
+
+
+def solve_cvrp(
+    locations,
+    num_vehicles=2,
+    vehicle_capacity=25
+):
+    distance_matrix = build_distance_matrix(locations)
+    demands = [loc["demand"] for loc in locations]
+    n = len(locations)
+
+    manager = pywrapcp.RoutingIndexManager(
+        n,
+        num_vehicles,
+        0
+    )
+
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+
+        return distance_matrix[from_node][to_node]
+
+    transit_callback_index = (
+        routing.RegisterTransitCallback(
+            distance_callback
+        )
+    )
+
+    routing.SetArcCostEvaluatorOfAllVehicles(
+        transit_callback_index
+    )
+
+    def demand_callback(from_index):
+        from_node = manager.IndexToNode(from_index)
+        return demands[from_node]
+
+    demand_callback_index = (
+        routing.RegisterUnaryTransitCallback(
+            demand_callback
+        )
+    )
+
+    routing.AddDimensionWithVehicleCapacity(
+        demand_callback_index,
+        0,
+        [vehicle_capacity] * num_vehicles,
+        True,
+        "Capacity",
+    )
+
+    search_parameters = (
+        pywrapcp.DefaultRoutingSearchParameters()
+    )
+
+    search_parameters.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    )
+
+    search_parameters.local_search_metaheuristic = (
+        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    )
+
+    search_parameters.time_limit.FromSeconds(5)
+
+    solution = routing.SolveWithParameters(
+        search_parameters
+    )
+
+    return (
+        manager,
+        routing,
+        solution,
+        distance_matrix
+    )
+
+
+def extract_routes(
+    manager,
+    routing,
+    solution,
+    locations,
+    num_vehicles
+):
+    routes = []
+    total_distance_m = 0
+
+    for vehicle_id in range(num_vehicles):
+        index = routing.Start(vehicle_id)
+        route = []
+        route_distance = 0
+        route_load = 0
+
+        while not routing.IsEnd(index):
+            node = manager.IndexToNode(index)
+
+            route.append(
+                locations[node]["name"]
+            )
+
+            route_load += locations[node]["demand"]
+
+            previous_index = index
+
+            index = solution.Value(
+                routing.NextVar(index)
+            )
+
+            route_distance += (
+                routing.GetArcCostForVehicle(
+                    previous_index,
+                    index,
+                    vehicle_id
+                )
+            )
+
+        route.append(
+            locations[
+                manager.IndexToNode(index)
+            ]["name"]
+        )
+
+        total_distance_m += route_distance
+
+        routes.append({
+            "vehicle": f"Truck {vehicle_id + 1}",
+            "stops": route,
+            "distance_km": round(
+                route_distance / 1000,
+                2
+            ),
+            "load_units": route_load,
+        })
+
+    return (
+        routes,
+        round(total_distance_m / 1000, 2)
+    )
+
+
+def naive_baseline_distance(locations):
+    hub = locations[0]
+    total = 0.0
+
+    for loc in locations[1:]:
+        total += 2 * haversine_km(
+            (
+                hub["lat"],
+                hub["lon"]
+            ),
+            (
+                loc["lat"],
+                loc["lon"]
+            )
+        )
+
+    return round(total, 2)
+
+
+def run(
+    num_vehicles=2,
+    vehicle_capacity=25,
+    out_json="route_output.json"
+):
+    locations = build_sample_locations()
+
+    print(
+        f"Optimizing pickup routes for "
+        f"{len(locations) - 1} farmers, "
+        f"{num_vehicles} trucks "
+        f"(capacity {vehicle_capacity} units each)...\n"
+    )
+
+    (
+        manager,
+        routing,
+        solution,
+        _
+    ) = solve_cvrp(
+        locations,
+        num_vehicles,
+        vehicle_capacity
+    )
+
+    if not solution:
+        print(
+            "No feasible solution found — "
+            "try increasing vehicle capacity or count."
+        )
+        return None
+
+    (
+        routes,
+        optimized_total_km
+    ) = extract_routes(
+        manager,
+        routing,
+        solution,
+        locations,
+        num_vehicles
+    )
+
+    baseline_km = naive_baseline_distance(
+        locations
+    )
+
+    savings_pct = round(
+        (
+            (baseline_km - optimized_total_km)
+            / baseline_km
+            * 100
+        ),
+        1
+    )
+
+    print("=== OPTIMIZED ROUTES ===")
+
+    for r in routes:
+        print(
+            f"\n{r['vehicle']} "
+            f"(load: {r['load_units']} units, "
+            f"{r['distance_km']} km)"
+        )
+
+        print(
+            "  " + " -> ".join(r["stops"])
+        )
+
+    print("\n=== COMPARISON ===")
+
+    print(
+        f"Baseline (individual farmer trips to hub): "
+        f"{baseline_km} km total"
+    )
+
+    print(
+        f"Optimized consolidated routes: "
+        f"{optimized_total_km} km total"
+    )
+
+    print(
+        f"Distance saved: {savings_pct}%"
+    )
+
+    result = {
+        "num_vehicles": num_vehicles,
+        "vehicle_capacity": vehicle_capacity,
+        "routes": routes,
+        "optimized_total_km": optimized_total_km,
+        "baseline_total_km": baseline_km,
+        "distance_savings_pct": savings_pct,
+    }
+
+    with open(out_json, "w") as f:
+        json.dump(
+            result,
+            f,
+            indent=2
+        )
+
+    print(
+        f"\nFull route plan written to {out_json}"
+    )
+
+    return result
+
+
+if __name__ == "__main__":
+    run(
+        num_vehicles=2,
+        vehicle_capacity=25
+    )
