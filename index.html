@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KhetKonnect Buyer Marketplace | Fresh Direct-from-Farm Produce</title>
+    <meta name="description" content="Shop 100% fresh, farm-direct produce with zero middleman markup. Real-time inventory from local farmers powered by Supabase.">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <header class="navbar">
+        <a href="../index.html" class="logo" id="buyerLogo">
+            <span class="logo-icon">🌾</span> Khet<span>Konnect</span>
+            <span class="portal-tag">BUYER MARKETPLACE</span>
+        </a>
+
+        <div class="search-bar-wrap">
+            <input type="text" id="marketplaceSearchInput" placeholder="🔍 Search fresh crops (e.g. Tomatoes, Apples, Rice)...">
+        </div>
+
+        <nav id="buyerNav">
+            <a href="#marketplace" class="active">Marketplace</a>
+            <a href="#" id="navFavoritesBtn">❤️ Wishlist (<span id="favBadge">0</span>)</a>
+            <a href="#" id="navOrdersBtn">📦 My Orders (<span id="ordersBadge">0</span>)</a>
+            <a href="../farmer/index.html" class="nav-switch-btn">🧑‍🌾 Go to Farmer Portal →</a>
+        </nav>
+
+        <div class="nav-actions">
+            <!-- Language Selector -->
+            <select id="languageSelect" class="lang-dropdown">
+                <option value="en">English (EN)</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="or">ଓଡ଼ିଆ (Odia)</option>
+                <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+                <option value="mr">मराठी (Marathi)</option>
+                <option value="bn">বাংলা (Bengali)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+            </select>
+
+            <!-- Voice Search Button -->
+            <button id="buyerVoiceBtn" class="btn-icon" title="Voice Search">
+                🎤 Voice
+            </button>
+
+            <!-- Cart Trigger Button -->
+            <button id="buyerCartBtn" class="cart-trigger-btn">
+                🛒 Cart (<span id="cartCountBadge">0</span>)
+            </button>
+
+            <!-- Auth Buttons / User Profile -->
+            <div id="buyerAuthContainer">
+                <button id="buyerLoginBtn" class="btn-outline">Login</button>
+                <button id="buyerSignupBtn" class="btn-primary">Sign Up</button>
+            </div>
+
+            <div id="buyerProfileBadge" class="user-profile-badge hidden">
+                <button id="buyerMenuBtn" class="user-menu-btn">
+                    <span>🛒</span>
+                    <span id="buyerNameDisp">Buyer User</span>
+                </button>
+                <div id="buyerDropdown" class="user-dropdown hidden">
+                    <div class="dropdown-header">
+                        <strong id="dropdownBuyerName">Buyer User</strong>
+                        <span id="dropdownBuyerEmail" class="text-xs text-muted">buyer@khetkonnect.in</span>
+                    </div>
+                    <hr>
+                    <button id="menuOrdersLink" class="dropdown-item">📦 My Orders</button>
+                    <button id="menuFavLink" class="dropdown-item">❤️ Saved Favorites</button>
+                    <hr>
+                    <button id="buyerLogoutBtn" class="dropdown-item logout-btn">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- BUYER HERO BANNER -->
+    <section class="buyer-hero">
+        <div class="buyer-hero-content">
+            <span class="tag-pill">🌱 100% DIRECT FROM VERIFIED FARMERS</span>
+            <h1>Fresh Farm Harvest, <br>Delivered at <span>Honest Mandi Prices</span>.</h1>
+            <p>Support verified Indian farmers directly. Zero middlemen commissions, farm-grade freshness, and transparent batch traceability.</p>
+        </div>
+    </section>
+
+    <!-- MAIN MARKETPLACE -->
+    <main class="marketplace-container" id="marketplace">
+        
+        <!-- Category Filters & Stats -->
+        <div class="filter-bar">
+            <div class="category-chips" id="categoryChips">
+                <button class="chip active" data-category="all">All Harvest (<span id="cntAll">0</span>)</button>
+                <button class="chip" data-category="vegetables">🥦 Vegetables (<span id="cntVeg">0</span>)</button>
+                <button class="chip" data-category="fruits">🍎 Fruits (<span id="cntFruit">0</span>)</button>
+                <button class="chip" data-category="grains">🌾 Grains (<span id="cntGrain">0</span>)</button>
+                <button class="chip" data-category="pulses">🫘 Pulses (<span id="cntPulse">0</span>)</button>
+                <button class="chip" data-category="spices">🌶️ Spices (<span id="cntSpice">0</span>)</button>
+            </div>
+
+            <div class="sort-wrap">
+                <label>Sort By:</label>
+                <select id="sortSelect">
+                    <option value="featured">Featured / Best Match</option>
+                    <option value="price_low">Price: Low to High</option>
+                    <option value="price_high">Price: High to Low</option>
+                    <option value="stock">Highest Stock</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Produce Products Grid -->
+        <div id="buyerProductsGrid" class="produce-grid">
+            <!-- Dynamic Marketplace Cards -->
+        </div>
+    </main>
+
+    <!-- CART & CHECKOUT SLIDEOVER / MODAL -->
+    <div id="cartModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card cart-modal-card">
+            <div class="modal-header">
+                <h2>🛒 Your Fresh Harvest Cart</h2>
+                <button id="closeCartBtn" class="modal-close">&times;</button>
+            </div>
+
+            <div id="cartItemsContainer" class="cart-items-list">
+                <!-- Cart Items -->
+            </div>
+
+            <div class="cart-summary-box">
+                <div class="summary-line">
+                    <span>Produce Subtotal:</span>
+                    <strong id="cartSubtotal">₹0</strong>
+                </div>
+                <div class="summary-line">
+                    <span>Farm Direct Delivery:</span>
+                    <strong id="cartDeliveryFee">₹40</strong>
+                </div>
+                <hr>
+                <div class="summary-line total-line">
+                    <span>Grand Total:</span>
+                    <strong id="cartGrandTotal">₹40</strong>
+                </div>
+            </div>
+
+            <div class="checkout-form-section">
+                <h3>Delivery & Contact Information</h3>
+                <form id="checkoutForm">
+                    <div class="form-group">
+                        <label>Your Full Name *</label>
+                        <input type="text" id="buyerFullName" required placeholder="e.g., Ananya Sharma">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Phone Number *</label>
+                        <input type="tel" id="buyerPhone" required placeholder="+91 9876543210">
+                    </div>
+                    <div class="form-group">
+                        <label>Delivery Address *</label>
+                        <textarea id="buyerAddress" rows="2" required placeholder="Flat/House No, Street, Landmark, City & Pincode"></textarea>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large btn-checkout" id="placeOrderBtn">
+                        ✅ Place Direct Farm Order
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MY ORDERS MODAL -->
+    <div id="ordersModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card orders-modal-card">
+            <div class="modal-header">
+                <h2>📦 My Orders & Tracking</h2>
+                <button id="closeOrdersBtn" class="modal-close">&times;</button>
+            </div>
+            <div id="buyerOrdersList" class="orders-list-scroll">
+                <!-- Orders will render here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- FAVORITES MODAL -->
+    <div id="favoritesModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>❤️ My Saved Favorites</h2>
+                <button id="closeFavBtn" class="modal-close">&times;</button>
+            </div>
+            <div id="favoritesContainer" class="favorites-grid">
+                <!-- Wishlist items -->
+            </div>
+        </div>
+    </div>
+
+    <!-- AUTH MODAL -->
+    <div id="buyerAuthModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <button id="closeBuyerAuthBtn" class="modal-close">&times;</button>
+            
+            <div id="buyerLoginPane">
+                <h2>Buyer Sign In</h2>
+                <p class="text-muted">Access your cart, orders, and saved farmer favorites.</p>
+                <form id="bLoginForm">
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="bLoginEmail" required placeholder="buyer@khetkonnect.in">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="bLoginPassword" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn-primary btn-large">Login to Marketplace</button>
+                    <p class="auth-switch-text">New buyer? <a href="#" id="switchBSignup">Create Account</a></p>
+                </form>
+            </div>
+
+            <div id="buyerSignupPane" class="hidden">
+                <h2>Create Buyer Account</h2>
+                <p class="text-muted">Buy fresh produce direct from Indian farmers.</p>
+                <form id="bSignupForm">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="bSignupName" required placeholder="e.g., Ananya Sharma">
+                    </div>
+                    <div class="form-group">
+                        <label>Email Address *</label>
+                        <input type="email" id="bSignupEmail" required placeholder="ananya@gmail.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone Number *</label>
+                        <input type="tel" id="bSignupPhone" required placeholder="+91 9876543210">
+                    </div>
+                    <div class="form-group">
+                        <label>Delivery City *</label>
+                        <input type="text" id="bSignupCity" required placeholder="e.g., Mumbai, Maharashtra">
+                    </div>
+                    <div class="form-group">
+                        <label>Password *</label>
+                        <input type="password" id="bSignupPassword" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="btn-primary btn-large">Register as Buyer</button>
+                    <p class="auth-switch-text">Already registered? <a href="#" id="switchBLogin">Sign In</a></p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- VOICE SEARCH MODAL -->
+    <div id="buyerVoiceModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card voice-card">
+            <div class="voice-pulse-circle">🎤</div>
+            <h3>Listening for Produce Search...</h3>
+            <p id="buyerVoiceText" class="text-muted">Say "Search tomatoes", "Show fruits", or "Open my cart"</p>
+            <button id="stopBuyerVoiceBtn" class="btn-outline">Stop Listening</button>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toastNotification" class="toast hidden"></div>
+
+    <footer class="footer">
+        <p>© 2026 KhetKonnect | Shared Supabase Database & Backend Architecture</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
