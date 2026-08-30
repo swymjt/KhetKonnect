@@ -1,0 +1,254 @@
+import argparse
+import numpy as np
+import pandas as pd
+from prophet import Prophet
+import json
+import warnings
+
+warnings.filterwarnings("ignore")
+
+
+def load_sample_data(crop: str, market: str, n_days: int = 365) -> pd.DataFrame:
+    base_prices = {
+        "Tomato": 1800,
+        "Onion": 1500,
+        "Potato": 1200,
+        "Rice": 2200,
+        "Wheat": 2100,
+        "Brinjal": 1600,
+    }
+
+    base = base_prices.get(crop, 1500)
+
+    dates = pd.date_range(
+        end=pd.Timestamp.today(),
+        periods=n_days,
+        freq="D"
+    )
+
+    rng = np.random.default_rng(
+        seed=hash(crop + market) % (2**32)
+    )
+
+    t = np.arange(n_days)
+
+    yearly_season = 250 * np.sin(
+        2 * np.pi * t / 365 + 1.2
+    )
+
+    weekly_season = 60 * np.sin(
+        2 * np.pi * t / 7
+    )
+
+    trend = 0.15 * t
+
+    noise = rng.normal(
+        0,
+        70,
+        n_days
+    )
+
+    prices = (
+        base
+        + yearly_season
+        + weekly_season
+        + trend
+        + noise
+    )
+
+    prices = np.clip(
+        prices,
+        base * 0.4,
+        None
+    )
+
+    return pd.DataFrame({
+        "ds": dates,
+        "y": prices
+    })
+
+
+def forecast_prices(
+    df: pd.DataFrame,
+    periods: int = 14
+) -> pd.DataFrame:
+
+    model = Prophet(
+        yearly_seasonality=True,
+        weekly_seasonality=True,
+        daily_seasonality=False,
+        changepoint_prior_scale=0.1,
+        interval_width=0.85,
+    )
+
+    model.fit(df)
+
+    future = model.make_future_dataframe(
+        periods=periods
+    )
+
+    forecast = model.predict(future)
+
+    return forecast, model
+
+
+def best_selling_window(
+    forecast: pd.DataFrame,
+    periods: int
+) -> dict:
+
+    upcoming = forecast.tail(periods).copy()
+
+    best_row = upcoming.loc[
+        upcoming["yhat"].idxmax()
+    ]
+
+    worst_row = upcoming.loc[
+        upcoming["yhat"].idxmin()
+    ]
+
+    return {
+        "best_day": best_row["ds"].strftime("%Y-%m-%d"),
+        "best_price": round(best_row["yhat"], 2),
+        "worst_day": worst_row["ds"].strftime("%Y-%m-%d"),
+        "worst_price": round(worst_row["yhat"], 2),
+        "price_upside_pct": round(
+            (
+                (best_row["yhat"] - worst_row["yhat"])
+                / worst_row["yhat"]
+                * 100
+            ),
+            1
+        ),
+    }
+
+
+def run(
+    crop: str,
+    market: str,
+    periods: int = 14,
+    out_json: str = None
+):
+
+    print(
+        f"Loading historical price data for "
+        f"{crop} @ {market} mandi..."
+    )
+
+    df = load_sample_data(
+        crop,
+        market
+    )
+
+    print(
+        "Fitting Prophet forecasting model..."
+    )
+
+    forecast, model = forecast_prices(
+        df,
+        periods=periods
+    )
+
+    recommendation = best_selling_window(
+        forecast,
+        periods
+    )
+
+    result = {
+        "crop": crop,
+        "market": market,
+        "forecast_horizon_days": periods,
+        "recommendation": recommendation,
+        "forecast_preview": forecast.tail(periods)[
+            [
+                "ds",
+                "yhat",
+                "yhat_lower",
+                "yhat_upper"
+            ]
+        ].assign(
+            ds=lambda d:
+            d["ds"].dt.strftime("%Y-%m-%d")
+        ).to_dict(
+            orient="records"
+        ),
+    }
+
+    print("\n=== FORECAST SUMMARY ===")
+
+    print(
+        f"Crop: {crop} | Market: {market} | "
+        f"Horizon: {periods} days"
+    )
+
+    print(
+        f"Best day to sell:  "
+        f"{recommendation['best_day']} "
+        f"(₹{recommendation['best_price']}/quintal)"
+    )
+
+    print(
+        f"Worst day to sell: "
+        f"{recommendation['worst_day']} "
+        f"(₹{recommendation['worst_price']}/quintal)"
+    )
+
+    print(
+        f"Potential upside by timing sale well: "
+        f"{recommendation['price_upside_pct']}%"
+    )
+
+    if out_json:
+        with open(out_json, "w") as f:
+            json.dump(
+                result,
+                f,
+                indent=2
+            )
+
+        print(
+            f"\nFull forecast written to {out_json}"
+        )
+
+    return result
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(
+        description="Crop price forecasting for farmer marketplace"
+    )
+
+    parser.add_argument(
+        "--crop",
+        default="Tomato",
+        help="Crop name"
+    )
+
+    parser.add_argument(
+        "--market",
+        default="Bhubaneswar",
+        help="Mandi/market name"
+    )
+
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=14,
+        help="Days to forecast ahead"
+    )
+
+    parser.add_argument(
+        "--out",
+        default="forecast_output.json",
+        help="Output JSON path"
+    )
+
+    args = parser.parse_args()
+
+    run(
+        args.crop,
+        args.market,
+        args.days,
+        args.out
+    )
